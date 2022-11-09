@@ -25,13 +25,13 @@
 #define SUMO_CAR_WIDTH 2
 
 /*Factored value MCTS hyperparameters*/
-#define MAX_FVMCTS_DEPTH 3
+#define MAX_FVMCTS_DEPTH 2
 #define FVMCTS_GAMMA 0.35
-#define SIMULATIONS_FROM_ROOT 25
+#define SIMULATIONS_FROM_ROOT 40
 #define DISTANCE_FOR_CREATING_EDGE 20
 #define EXPLORATION_TERM 3.88f
-#define ALPHA 0.08
-#define BETA 1.5
+#define ALPHA 0.91
+#define BETA 1.15
 
 
 /*Max Plus hyperparameters */

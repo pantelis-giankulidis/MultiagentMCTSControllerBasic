@@ -95,7 +95,7 @@ float imediateReward(Car c, Car c_star, std::vector<Car> adjacencyList) {
 
 	float penalty = exitingRoadPenalty(c_star);
 
-	float score2 = ALPHA * res + BETA * collision + penalty;
+	float score2 = ALPHA * res + BETA * collision +penalty;
 	
 	return score2;
 }
@@ -103,18 +103,18 @@ float imediateReward(Car c, Car c_star, std::vector<Car> adjacencyList) {
 float exitingRoadPenalty(Car c) {
 	if (c.getPositionY() >= 10 - SUMO_CAR_WIDTH - ROAD_SAFETY_GAP) {
 		if (c.getVelocityY() > 0) {
-			return -50;
+			return -3*c.getPositionY();
 		}
 		else {
-			return -10;
+			return 0;// -c.getPositionY();
 		}
 	}
 	if (c.getPositionY() <= SUMO_CAR_WIDTH + ROAD_SAFETY_GAP) {
 		if (c.getVelocityY() < 0) {
-			return -50;
+			return -30 + c.getPositionY();
 		}
 		else {
-			return -10;
+			return 0;
 		}
 	}
 	return 0;
