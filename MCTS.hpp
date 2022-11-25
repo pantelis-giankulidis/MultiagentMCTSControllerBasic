@@ -580,7 +580,7 @@ private:
         while (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - old) < allowedComputationTime) {
             iterations++;
             
-            if (iterations > 300) {
+            if (iterations > 140) {
                 break;
             }
          
@@ -702,7 +702,7 @@ private:
 
         //Case when we had crush in the simulation
         if (states <= 5) {
-            score = score - 1/states;//TODO
+            score = score - 10/states;//TODO
         }
         else {
            score = score + (epsilon / (differenceFromDesiredSpeed + epsilon));//TODO check epsilon 

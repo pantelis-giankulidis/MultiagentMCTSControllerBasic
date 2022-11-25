@@ -21,7 +21,7 @@
 #define ROAD_WIDTH 10.2
 #define ROAD_SAFETY_GAP 0.2 
 #define CARS_IN_SIMULATION 200
-#define RUNNING_AS_INDEPENDENT_AGENTS 0
+#define RUNNING_AS_INDEPENDENT_AGENTS 1
 #define FVMCTS_LIMIT 10
 
 std::vector<timestampStatistics> stats{};
@@ -47,70 +47,6 @@ Car createCarFromSumo(int index, NumericalID* myids) {
 	return c;
 }
 
-
-void simulation_initialize() {
-
-	//Log file open
-	//
-	logFile.open("log.txt");
-	logFile9.open("log9.txt");
-	logFile12.open("log12.txt");
-	
-	initializeScores();
-
-	//initialize srand with the same seed as sumo
-	//srand(get_seed());
-	srand(get_seed());
-
-	//insert 20 vehicles
-	int n_init = 0;
-
-	double x_incr = 25, y_incr = 2.5, vx_incr = 5;
-	double x_val = x_incr, y_val = y_incr, vx_val = vx_incr, vy_val = 0;
-	int virtual_lanes = 3;
-	double width = 10;
-
-
-
-	initializeSimulationOne();
-	//initializeSimulationTwo();
-	//initializeSimulationThree();
-	//initializeSimulationFour();
-
-
-
-	char veh_name[40];
-	//route_id and type_id should be defined in the scenario we are running
-	char route_id[20] = "route0";
-	char type_id[20] = "1";
-	NumericalID v_id;
-	for (int i = 0; i < n_init; i++) {
-
-		sprintf(type_id, "%d", i % 8 + 1);
-		sprintf(veh_name, "%s_plugin_%d", type_id, (i + 1));
-
-		//v_id = insert_new_vehicle(veh_name, route_id, type_id, x_val, y_val, vx_val, vy_val, 0);
-		printf("veh_name = %s, route_id = %s, type_id = %s,x_val = %f, y_val = %f, vx_val = %f, vy_val = %f",
-			veh_name, route_id, type_id, x_val, y_val, vx_val, vy_val);
-		printf("%s inserted\n", veh_name);
-		y_val = y_val + y_incr;
-		if (i % virtual_lanes == (virtual_lanes - 1)) {
-			x_val += x_incr;
-			if (vx_val < 35) {
-				vx_val += vx_incr;
-			}
-
-			y_val = y_incr;
-		}
-
-	}
-
-
-
-}
-/*
-* Custom simulations for MAXPLUS paper
-*/
 void initializeSimulationOne() {
 	insert_new_vehicle("lane_free_car_plugin_0", "route0", "lane_free_car", 10, 8, 28, 0, 0);
 	insert_new_vehicle("lane_free_car_plugin_1", "route0", "lane_free_car", 2.5, 8.5, 28, 0, 0);
@@ -140,6 +76,65 @@ void initializeSimulationFour() {
 	insert_new_vehicle("lane_free_car_plugin_3", "route0", "lane_free_car", 15, 5, 28, 0, 0);
 }
 
+void simulation_initialize() {
+
+	//Log file open
+	//
+	logFile.open("log.csv");
+	logFile9.open("log9.txt");
+	logFile12.open("log12.txt");
+	
+	logFile << "vehicle,desspeed" << std::endl;
+	initializeScores();
+
+	//initialize srand with the same seed as sumo
+	srand(get_seed());
+	//srand(time(0));
+
+
+	/*Insert vehicles */
+	//initializeSimulationOne();
+	//initializeSimulationTwo();
+	//initializeSimulationThree();
+	initializeSimulationFour();
+
+
+	//insert 20 vehicles
+	int n_init = 0;
+
+	double x_incr = 25, y_incr = 2.5, vx_incr = 5;
+	double x_val = x_incr, y_val = y_incr, vx_val = vx_incr, vy_val = 0;
+	int virtual_lanes = 3;
+	double width = 10;
+
+
+	char veh_name[40];
+	//route_id and type_id should be defined in the scenario we are running
+	char route_id[20] = "route0";
+	char type_id[20] = "1";
+	NumericalID v_id;
+	for (int i = 0; i < n_init; i++) {
+
+		sprintf(type_id, "%d", i % 8 + 1);
+		sprintf(veh_name, "%s_plugin_%d", type_id, (i + 1));
+
+		v_id = insert_new_vehicle(veh_name, route_id, type_id, x_val, y_val, vx_val, vy_val, 0);
+		printf("%s inserted\n", veh_name);
+		y_val = y_val + y_incr;
+		if (i % virtual_lanes == (virtual_lanes - 1)) {
+			x_val += x_incr;
+			if (vx_val < 35) {
+				vx_val += vx_incr;
+			}
+
+			y_val = y_incr;
+		}
+
+	}
+
+
+
+}
 
 void simulation_step() {
 	NumericalID* myids = get_lane_free_ids();
@@ -150,7 +145,11 @@ void simulation_step() {
 
 	// Allocate memory for statistics in this timestamp
 	if (stats.begin() == stats.end() || stats.back().timestamp != get_current_time_step()) {
-		timestampStatistics st = timestampStatistics(get_current_time_step(), n_myids, 0, 0, 0);
+		timestampStatistics st = timestampStatistics(get_current_time_step(), n_myids, 0, 0, 0,
+			get_speed_x(myids[0]),get_speed_y(myids[0]), get_position_x(myids[0]),get_position_y(myids[0]),
+			get_speed_x(myids[1]), get_speed_y(myids[1]), get_position_x(myids[1]), get_position_y(myids[1]),
+			get_speed_x(myids[2]), get_speed_y(myids[2]), get_position_x(myids[2]), get_position_y(myids[2]),
+			get_speed_x(myids[3]), get_speed_y(myids[3]), get_position_x(myids[3]), get_position_y(myids[3]));
 		stats.push_back(st);
 	}
 
@@ -168,7 +167,6 @@ void simulation_step() {
 	// Initiate statistics for the nodes and the edges of the coordination graph that will be created.
 	if (RUNNING_AS_INDEPENDENT_AGENTS == 0) {
 		std::cout << "--------------------------------------------------------" << std::endl;
-		maxPlusGraph.clear();
 		laneFreeGlobalState state = laneFreeGlobalState();
 		for (int j = 0; j < n_myids; j++) {
 			Car car = createCarFromSumo(j, myids);
@@ -181,58 +179,27 @@ void simulation_step() {
 
 			for (node nod : maxPlusGraph) {
 				int actionIndex = nod.getBestAction();
-				int longAcc = 0, laterAcc = 0;
-
-
-				/*
-				* Case of diagonal movements
-				*/
 				std::div_t action = std::div(actionIndex, longitudinalAccelerationValues.size());
-				//longAcc = longitudinalAccelerationValues.at(action.rem);
-				//laterAcc = lateralAccelerationValues[action.quot];
-
-
-				/*
-				* Case of non-diagonal movements
-				*/
-				if (actionIndex < 3) {
-					longAcc = longitudinalAccelerationValues[actionIndex];
-				}
-				else {
-					laterAcc = longitudinalAccelerationValues[actionIndex];
-				}
-
-				std::cout << "Car: " << nod.getCar().getCarNumber() << std::endl;
-				std::cout << "desired speed: " << nod.getCar().getDesiredSpeed() << ",actual speed: " << get_speed_x(myids[nod.getCar().getCarNumber()]) << std::endl;
-				std::cout << "Action taken: lateral: " << laterAcc << ", longit : " << longAcc << std::endl;
-
 				if (nod.getAdjacencyList().size() > 0) {
-					
-					double newLateralVelocity = nod.getCar().getVelocityY() + get_time_step_length() * lateralAccelerationValues[action.quot]; // v = u + at
-					double newLateralPosition = nod.getCar().getPositionY() + get_time_step_length() * newLateralVelocity;
-
-					double boundaryUp = (ROAD_WIDTH - ROAD_SAFETY_GAP - (nod.getCar().getWidth() / 2));
-					double boundaryDown = (nod.getCar().getWidth() / 2) + ROAD_SAFETY_GAP;
-
-					///////////////////////////////////////////
-
-
-					/// ///////////////////
-
-					if (newLateralPosition > boundaryUp) {
-						apply_acceleration(myids[nod.getCar().getCarNumber()], longAcc, -1);
-					}
-					else {
-						if (newLateralPosition < boundaryDown) {
-							apply_acceleration(myids[nod.getCar().getCarNumber()], longAcc, 1);
-						}
-						else {
-							apply_acceleration(myids[nod.getCar().getCarNumber()], longAcc, laterAcc);
+					std::cout << "Action taken from " << nod.getCar().getCarNumber() << " is " << actionIndex << std::endl;
+					std::cout << "Desired speed = " << nod.getCar().getDesiredSpeed() << ", actual speed=" << nod.getCar().getVelocityX() << std::endl;
+					int j = nod.getCar().getCarNumber();
+					if (strcmp(get_vehicle_name(myids[j]), "normal_flow.4") == 0) {
+						logFile << "Car=" << get_vehicle_name(myids[j]) << ", " << get_speed_x(myids[j]) << ", " << get_desired_speed(myids[j]) << ", " << "posx= "<<get_position_x(myids[j])<<", "<< actionIndex << std::endl;
+						for (float f : nod.getQ()) {
+							logFile << " action : value = " << f << std::endl;
 						}
 					}
+					/*if (strcmp(get_vehicle_name(myids[j]), "normal_flow.9") == 0) {
+						logFile9 << "Car=" << get_vehicle_name(myids[j]) << ", " << get_speed_x(myids[j]) << ", " << get_desired_speed(myids[j]) << ", " << "posx= " << get_position_x(myids[j]) << ", " << actionIndex << std::endl;
+					}
+					if(strcmp(get_vehicle_name(myids[j]), "normal_flow.12") == 0) {
+						logFile12 << "Car=" << get_vehicle_name(myids[j]) << ", " << get_speed_x(myids[j]) << ", " << get_desired_speed(myids[j]) << ", " << "posx= " << get_position_x(myids[j]) << ", " <<actionIndex<<std::endl;
+					}*/
+					apply_acceleration(myids[nod.getCar().getCarNumber()], longitudinalAccelerationValues.at(action.rem), lateralAccelerationValues[action.quot]);
 				}
 				else {
-					apply_acceleration(myids[nod.getCar().getCarNumber()], 0, 0);
+					apply_acceleration(myids[nod.getCar().getCarNumber()], longitudinalAccelerationValues[3], lateralAccelerationValues[0]);
 				}
 			}
 			maxPlusGraph.clear();
@@ -251,16 +218,7 @@ void simulation_step() {
 	if (RUNNING_AS_INDEPENDENT_AGENTS == 1) {
 
 		
-		std::string car1 = "normal_flow.177";
-		std::string car2 = "normal_flow.175";
-		std::string car3 = "normal_flow.huhu";
-
-		std::string car4 = "normal_flow.409";
-		std::string car5 = "normal_flow.411";
-		std::string car6 = "normal_flow.jjj";
-
-		std::string car7 = "normal_flow.155";
-		std::string car8 = "normal_flow.158";
+		
 
 		
 
@@ -268,7 +226,7 @@ void simulation_step() {
 
 		//2.Iterate through current vehicles in the road
 		for (i = 0; i < n_myids; i++) {
-
+			logFile << get_vehicle_name(myids[i]) << "," << get_desired_speed(myids[i]) << std::endl;
 			/*
 			* Create root of the MCTS tree
 			*/
@@ -300,27 +258,7 @@ void simulation_step() {
 			/* After creating the initial state,run the MCTS algorithm and get the best action*/
 			carAction next = MCTSInstance::calculateAction(root);
 			//std::cout << "Root size after = " << sizeof(root) << std::endl;
-			if (get_vehicle_name(myids[i]) == car1 || get_vehicle_name(myids[i]) == car2 || get_vehicle_name(myids[i]) == car3) {
-				
-					logFile << "Agent " << i << " desired_speed = " << get_desired_speed(myids[i]) << ", actual_speed = " << get_speed_x(myids[i]);
-					logFile << ",Position = " << get_position_x(myids[i]) << "," << get_position_y(myids[i]) << "  , time=" << get_current_time_step() * get_time_step_length()<<std::endl;
-					logFile << " ACTION = " << next.getLongitudinalAccelerationValue() << ", AND " << next.getLateralAccelerationValue() << std::endl;
-				
-			}
 			
-			if (get_vehicle_name(myids[i]) == car4 || get_vehicle_name(myids[i]) == car5 || get_vehicle_name(myids[i]) == car5) {
-
-				logFile9 << "Agent " << i << " desired_speed = " << get_desired_speed(myids[i]) << ", actual_speed = " << get_speed_x(myids[i]);
-				logFile9 << "Position = " << get_position_x(myids[i]) << "," << get_position_y(myids[i]) << "   , time=" << get_current_time_step() * get_time_step_length() << std::endl;
-				logFile9 << " ACTION = " << next.getLongitudinalAccelerationValue() << ", AND " << next.getLateralAccelerationValue() << std::endl;
-
-			}
-
-			if (get_vehicle_name(myids[i]) == car7 || get_vehicle_name(myids[i]) == car8) {
-				logFile12 << "Agent " << i << " desired_speed = " << get_desired_speed(myids[i]) << ", actual_speed = " << get_speed_x(myids[i]);
-				logFile12 << "Position = " << get_position_x(myids[i]) << "," << get_position_y(myids[i]) << "   , time=" << get_current_time_step() * get_time_step_length() << std::endl;
-				logFile12 << " ACTION = " << next.getLongitudinalAccelerationValue() << ", AND " << next.getLateralAccelerationValue() << std::endl;
-			}
 
 
 			/* Apply the best action to the controlled car*/
@@ -370,9 +308,6 @@ void simulation_step() {
 			//apply_acceleration(myids[i], next.getLongitudinalAccelerationValue(), next.getLateralAccelerationValue());
 		}
 
-		logFile << "-----------------------------------------" << std::endl;
-		logFile9 << "------------------------------------------" << std::endl;
-
 	}
 
 
@@ -389,10 +324,8 @@ void simulation_step() {
 		totalDifferenceFromDesiredSpeed = totalDifferenceFromDesiredSpeed + differenceFromDesiredSpeed(get_speed_x(myids[j]), get_desired_speed(myids[j]));
 	}
 	stats.back().sumOfDifferencesFromDesiredSpeed = totalDifferenceFromDesiredSpeed;
-	 
-	//std::cout << "SPEED ->> " << stats.back().sumOfDifferencesFromDesiredSpeed << " CARS --> " << stats.back().cars;
-	//std::cout << "DIFFERENCE --> " << stats.back().getAverageDifferenceFromDesiredSpeed() << std::endl;
 
+	/*Case of car examples*/
 
 	NumericalID* detector_ids = get_detectors_ids();
 	int* detector_values = get_detectors_values();
@@ -461,13 +394,17 @@ void simulation_finalize() {
 	/*
 	* WRITING STATISTICS TO FILE
 	*/
-	myFile.open("stats7000.csv");
-	myFile << "timestamp,Collisions,out_of_bounds,speedDiff" << std::endl;
+	myFile.open("stats_ex4_mcts.csv");
+	myFile << "timestamp,Collisions,out_of_bounds,speedDiff,car1x,car1y,car1posx,car1posy,car2x,car2y,car2posx,car2posy,car3x,car3y,car3posx,car3posy,car4x,car4y,car4posx,car4posy" << std::endl;
 	int timestamp = 1;
 	for (timestampStatistics ts : stats) {
 
-		myFile << timestamp<<","<<ts.collisions << "," << ts.carsOutOfBounds << "," << ts.getAverageDifferenceFromDesiredSpeed() << std::endl;
-		timestamp = timestamp + 4;
+		myFile << timestamp << ","<<ts.collisions << "," << ts.carsOutOfBounds << "," << ts.getAverageDifferenceFromDesiredSpeed() << ","
+		 << ts.car1speedx << "," << ts.car1speedy << "," << ts.car1posx <<","<<ts.car1posy << ","
+		 << ts.car2speedx << "," << ts.car2speedy << "," << ts.car2posx <<","<<ts.car2posy<<","
+		 << ts.car3speedx << "," << ts.car3speedy << "," << ts.car3posx <<","<<ts.car3posy<<","
+		 << ts.car4speedx << "," << ts.car4speedy << "," << ts.car4posx <<","<< ts.car4posy << std::endl;
+		timestamp = timestamp + 0.25;
 	}
 	myFile.close();
 	return;
@@ -508,8 +445,8 @@ void event_vehicle_out_of_bounds(NumericalID veh_id) {
 	stats.back().carsOutOfBounds = stats.back().carsOutOfBounds + 1;
 }
 
-double differenceFromDesiredSpeed(double actualSpeed, double desiredSpeed) {
-	return desiredSpeed - actualSpeed;
+double differenceFromDesiredSpeed(double desiredSpeed, double actualSpeed) {
+	return abs(desiredSpeed - actualSpeed);
 }
 
 void simulate(laneFreeGlobalState state, int depth) {

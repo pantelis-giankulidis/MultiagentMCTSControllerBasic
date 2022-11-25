@@ -35,23 +35,9 @@ void updateNodeScore(unsigned int id, float score) {
 }
 
 Car applyDynamics(Car c, int indexActionX, int indexActionY) {
-	int accelX = 0,accelY=0;
-	
-	/**
-	* Case of diagonal movements
-	*/
-	//accelX = longitudinalAccelerationValues[indexActionX];
-	//accelY = lateralAccelerationValues[indexActionY];
 
-	/**
-	* Case of non-diagonal movements
-	*/
-	if (indexActionX < 3) {
-		accelX = longitudinalAccelerationValues[indexActionX];
-	}
-	else {
-		accelY = longitudinalAccelerationValues[indexActionX];
-	}
+	int accelX = longitudinalAccelerationValues[indexActionX];
+	int accelY = lateralAccelerationValues[indexActionY];
 
 	double oldVelocityX = c.getVelocityX();
 	double oldVelocityY = c.getVelocityY();
@@ -69,15 +55,8 @@ float imediateReward(Car c, Car c_star, std::vector<Car> adjacencyList) {
 
 	float score = oldDistanceFromDesiredSpeed - newDistanceFromDesiredSpeed;
 
-	float res = (7 / (newDistanceFromDesiredSpeed+epsilon));// +score;//elegxos gia 0
-	if (res > 10) {
-		res = 10;
-	}
-	//std::cout << "Score ->" << score << std::endl;
-	/*if (c_star.getVelocityX() > c_star.getDesiredSpeed()) {
-		res = res - oldDistanceFromDesiredSpeed;
-	}*/
-
+	float res = (10 / newDistanceFromDesiredSpeed);// +score;//elegxos gia 0
+	//std::cout << "Res=" << res << std::endl;
 	// Check if a collision in eminent
 	float collision = 0;
 
@@ -89,35 +68,10 @@ float imediateReward(Car c, Car c_star, std::vector<Car> adjacencyList) {
 	for (Car c2 : adjacencyList) {
 		collision = collision + betweenCarsReward(c, c2);
 	}
-	if (adjacencyList.size() > 0) {
-		collision = collision / adjacencyList.size();
-	}
+	collision = collision / adjacencyList.size();
 
-	float penalty = exitingRoadPenalty(c_star);
-
-	float score2 = ALPHA * res + BETA * collision +penalty;
-	
-	return score2;
-}
-
-float exitingRoadPenalty(Car c) {
-	if (c.getPositionY() >= 10 - SUMO_CAR_WIDTH - ROAD_SAFETY_GAP) {
-		if (c.getVelocityY() > 0) {
-			return -3*c.getPositionY();
-		}
-		else {
-			return 0;// -c.getPositionY();
-		}
-	}
-	if (c.getPositionY() <= SUMO_CAR_WIDTH + ROAD_SAFETY_GAP) {
-		if (c.getVelocityY() < 0) {
-			return -30 + c.getPositionY();
-		}
-		else {
-			return 0;
-		}
-	}
-	return 0;
+	//ALPHA favours reaching the desired speed and BETA favours avoiding collisions
+	return ALPHA * res - BETA * collision;
 }
 
 /* Function that computes the reward based on the likelihood of collision betweeen two cars*/
@@ -125,12 +79,9 @@ float betweenCarsReward(Car c, Car c1) {
 	float distanceX = abs(c.getPositionX() - c1.getPositionX());
 	float distanceY = abs(c.getPositionY() - c1.getPositionY());
 
-	
-	//float score = (10 / distanceX) + (10 / distanceY);
-	float score = custom_pairwise_factor_function(c.getPositionX(), c.getPositionY(), c.getVelocityX(), c.getVelocityY(),
-		c1.getPositionX(), c1.getPositionY(), c1.getVelocityX(), c1.getVelocityY(), 1, 0, 0, 0);
-	
-	return 3*score;
+	float score = (20 / distanceX) + (10 / distanceY);
+
+	return 0.1 * score;
 }
 
 

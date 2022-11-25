@@ -7,13 +7,13 @@
 
 class MaxPlus {
 private:
-	/*1 for Exploration and 0 for no exploration*/
+	/*0 for Exploration and 1 for not exploration*/
 	int edgeExplorationFlag;
 
-	/*1 for Exploration and 0 for no exploration*/
+	/*0 for Exploration and 1 for not exploration*/
 	int nodeExplorationFlag;
 
-	/*1 for Normalization and 0 for not normalization*/
+	/*0 for Normalization and 1 for not normalization*/
 	int normalizationFlag;
 
 	/*The exploration term for FV-MCTS*/
@@ -29,8 +29,8 @@ public:
 	MaxPlus(int numberOfAgents) {
 		this->C = EXPLORATION_TERM;
 		this->numberOfAgents = numberOfAgents;
-		this->edgeExplorationFlag = 0;
-		this->nodeExplorationFlag = 1;
+		this->edgeExplorationFlag = 1;
+		this->nodeExplorationFlag = 0;
 		this->normalizationFlag = 0;
 		this->gamma = FVMCTS_GAMMA;
 	}
@@ -62,20 +62,15 @@ public:
 
 		/* Creating the edges of the graph*/
 		for (int i = 0; i < maxPlusGraph.size(); i++) {
-			for (int j = i; j < maxPlusGraph.size(); j++) {
-				if (i == j) {
-					continue;
-				}
-			
-				if (abs(maxPlusGraph[i].getCar().getPositionX() - maxPlusGraph[j].getCar().getPositionX()) <= DISTANCE_FOR_CREATING_EDGE) {
+			for (int j = i + 1; j < maxPlusGraph.size(); j++) {
+				if (abs(maxPlusGraph[i].getCar().getPositionX() - maxPlusGraph[j].getCar().getPositionX()) < DISTANCE_FOR_CREATING_EDGE) {
 					edge* e = new edge(maxPlusGraph[i].getCar().getCarNumber(), maxPlusGraph[j].getCar().getCarNumber());
 					maxPlusGraph[i].addEdge(e);
 					maxPlusGraph[j].addEdge(e);
 				}
-				//std::cout << "INSERT" << std::endl;
 			}
 		}
-		
+
 	}
 
 	/*Updatess flag for node exploration
@@ -104,7 +99,7 @@ public:
 	*
 	*/
 	void generateRandomActions() {
-		int initActionIndex = 1;
+		int initActionIndex = 2;
 		float initActionValue = 0;
 		for (int i = 0; i < maxPlusGraph.size(); i++) {
 			node nod = maxPlusGraph[i];
@@ -112,13 +107,13 @@ public:
 			nod.setTemporaryBestActionValue(initActionValue);
 
 			for (edge* e : nod.getAdjacencyList()) {
-				if (e->getCarNumberSender() == nod.getCar().getCarNumber()) {
-					e->setBestActionIndexSender(initActionIndex);
-					e->setBestActionValueSender(initActionValue);
+				if (e->getCarNumberI() == nod.getCar().getCarNumber()) {
+					e->setBestActionIndexI(initActionIndex);
+					e->setBestActionValueI(initActionValue);
 				}
 				else {
-					e->setBestActionIndexReceiver(initActionIndex);
-					e->setBestActionValueReceiver(initActionValue);
+					e->setBestActionIndexJ(initActionIndex);
+					e->setBestActionValueJ(initActionValue);
 				}
 			}
 			maxPlusGraph[i] = nod;
@@ -135,25 +130,24 @@ public:
 	*
 	* @Return -> coordinated action List<carActionPair>
 	*/
-	void coordinateActions() {
+	void maxplus() {
 
 		// Initially,pick random actions for the simulation.
 		generateRandomActions();
-		setInitialMessageValues();
 
 		/*Apply the MaxPlus to get one coordinated action at one leaf of the Monte Carlo Tree */
 		for (int i = 0; i < maxPlusMCSimulationRounds; i++) {
-			messagePassing();
-			computeQwithMessages();
-		}
-		
-		//TODO message padding with edge exploration
-		this->edgeExplorationFlag = 1;
-		messagePassing();
-		computeQwithMessages();
-		calculateBestq();
-	}
 
+			setInitialMessageValues();
+			messagePassing();
+			calculateNodeQAndGetBestAction();
+
+		}
+		std::cout << "MAXPLUS ENDED WITH: " << std::endl;
+		for (int i = 0; i < maxPlusGraph.size(); i++) {
+			std::cout << " agent " << maxPlusGraph[i].getCar().getCarNumber() << ", action = " << maxPlusGraph[i].getTemporaryBestActionIndex() << ", q=" << maxPlusGraph[i].getTemporaryBestActionValue() << std::endl;
+		}
+	}
 
 
 	/* Between two iterations, the message values stored in the graph, must be set to zero.
@@ -162,8 +156,8 @@ public:
 	void setInitialMessageValues() {
 		for (int i = 0; i < maxPlusGraph.size(); i++) {
 			for (edge* e : maxPlusGraph[i].getAdjacencyList()) {
-				e->initialiseMSender();
-				e->initialiseMReceiver();
+				e->initialiseMij();
+				e->initialiseMji();
 			}
 		}
 	}
@@ -179,6 +173,12 @@ public:
 		while (rounds < maxPlusMessagePassingPerRound) {
 			rounds++;
 
+			// Add exploration terms in the last iteration
+			if (rounds == maxPlusMessagePassingPerRound - 1) {
+				edgeExplorationFlag = 0;
+				normalizationFlag = 0;
+			}
+
 			// For all agents i
 			for (int i = 0; i < maxPlusGraph.size(); i++) {
 				node agent = maxPlusGraph[i];
@@ -187,31 +187,33 @@ public:
 				// 
 				for (int j = 0; j < agent.getAdjacencyList().size(); j++) {
 					edge* e = agent.getAdjacencyList()[j];
-					bool is_sender = (agent.getCar().getCarNumber() == e->getCarNumberSender());
+					bool is_i = agent.getCar().getCarNumber() == e->getCarNumberI();
 
 					for (int action = 0; action < availableActions; action++) {
 
+
 						//UPDATE
 						for (int actionj = 0; actionj < availableActions; actionj++) {
-							float newMij = agent.getQ()[action] + e->getQij()[is_sender ? action : actionj][is_sender ? actionj : action]  - sumOfMki(agent, e, action);
-							
-							if (is_sender) {
-								if (normalizationFlag == 1) {
-									newMij = newMij - (e->getMSenderRowSum(action) / availableActions);
+							//std::cout << "AJ="<<actionj << std::endl;
+							float newMij = agent.getQ()[action] + e->getQij()[is_i ? action : actionj][is_i ? actionj : action];// +sumOfMki(agent, e, action);
+							float qij = e->getQij()[is_i ? action : actionj][is_i ? actionj : action];
+							if (edgeExplorationFlag == 0) {
+
+								//std::cout << "ACTION "<<action<<" , aj="<<actionj<<", edge exploration components : Q(ai) = " << agent.getQ()[action] << ", Qij(aj)="<<qij<<",N="<<agent.getN()<<", log(N + 1) = " << log(agent.getN() + 1) << ", Ni(ai) = " << e->getNij()[is_i ? action : e->getBestActionIndexI()][is_i ? e->getBestActionIndexJ() : action] << std::endl;
+								newMij = newMij + C * sqrt(log(agent.getN() + 1) / (e->getNij()[is_i ? action : actionj][is_i ? actionj : action] + 1));
+							}
+
+							if (is_i) {
+								if (normalizationFlag == 0) {
+									newMij = newMij - (e->getMijRowSum(action) / availableActions);
 								}
-								if (edgeExplorationFlag == 1) {
-									newMij = newMij + C * sqrt(log(agent.getN() + 1) / (e->getNij()[action][actionj] + 1));
-								}
-								e->setMSender(action, actionj, newMij);
+								e->setMij(action, actionj, newMij);
 							}
 							else {
-								if (normalizationFlag == 1) {
-									newMij = newMij - (e->getMReceiverRowSum(action) / availableActions);
+								if (normalizationFlag == 0) {
+									newMij = newMij - (e->getMjiRowSum(action) / availableActions);
 								}
-								if (edgeExplorationFlag == 1) {
-									newMij = newMij + C * sqrt(log(agent.getN() + 1) / (e->getNij()[actionj][action] + 1));
-								}
-								e->setMReceiver(action, actionj, newMij);
+								e->setMji(action, actionj, newMij);
 							}
 						}
 					}
@@ -220,51 +222,72 @@ public:
 
 				maxPlusGraph[i] = agent;
 			}
+
+
 		}
+		edgeExplorationFlag = 1;
+		normalizationFlag = 1;
 	}
 
 
-	/* 
-	* Compute the values of q, for every message passing phase 
+	/* Equation Line 16 on the right side
 	*
 	*/
-	void computeQwithMessages() {
+	void calculateNodeQAndGetBestAction() {
 
 		for (int i = 0; i < maxPlusGraph.size(); i++) {
 			node nod = maxPlusGraph[i];
-			//nod.printTempQ();
-			std::vector<float> tempQ = nod.getTempQForMaxPlus();
+			int pickedActionIndex = 2;
+			float BestQ = -10000;
 
 			for (int actionIndex = 0; actionIndex < availableActions; actionIndex++) {
-				float q = nod.getQ()[actionIndex] - sumOfMki(nod, NULL, actionIndex);
-				if (nodeExplorationFlag==1) {
-					q = q + C * sqrt(log(nod.getSumN()+ 1) / (nod.getNi()[actionIndex] + 1));
+
+				float q = nod.getQ()[actionIndex];// +sumOfMki(nod, NULL, actionIndex);
+
+				if (nodeExplorationFlag == 0) {
+					q = q + C * sqrt(log(vectorSum(nod.getNi()) + 1) / nod.getNi()[actionIndex]);
 				}
-				tempQ[actionIndex] = q;
+
+				if (q > BestQ) {
+					//std::cout << "CHECK FOR BIGGER" << std::endl;
+					BestQ = q;
+					pickedActionIndex = actionIndex;
+				}
+				if (q == BestQ) {
+					//std::cout << "CHECK FOR TIES " << std::endl;
+					bool pickOnTies = rand() > (RAND_MAX/2);
+					if (pickOnTies) {
+						//std::cout << "HAD A TIE" << std::endl;
+						BestQ = q;
+						pickedActionIndex = actionIndex;
+					}
+				}
+				
 			}
-			nod.setTempQForMaxPlus(tempQ);
+			nod.setTemporaryBestActionIndex(pickedActionIndex);
+			nod.setTemporaryBestActionValue(BestQ);
+
+			for (int p = 0; p < nod.getAdjacencyList().size(); p++) {
+				edge* e = nod.getAdjacencyList()[p];
+
+				if (e->getBestActionIndexI() == nod.getCar().getCarNumber()) {
+					e->setBestActionIndexI(pickedActionIndex);
+					e->setBestActionValueI(BestQ);
+				}
+				else {
+					e->setBestActionIndexJ(pickedActionIndex);
+					e->setBestActionValueJ(BestQ);
+				}
+
+				nod.setEdge(p, e);
+			}
 			maxPlusGraph[i] = nod;
+
 		}
 
 	}
 
-	/*
-	* After the message passing phase, we take the best action of each agent
-	*/
-	void calculateBestq() {
-		float bestQ = -1000;
-		int indexQ = 0;
-		for (node & n:maxPlusGraph) {
-			for (int action = 0; action < availableActions; action++) {
-				if (n.getTempQForMaxPlus()[action] > bestQ) {
-					bestQ = n.getTempQForMaxPlus()[action];
-					indexQ = action;
-				}
-			}
-			n.setTemporaryBestActionIndex(indexQ);
-			n.setTemporaryBestActionValue(bestQ);
-		}
-	}
+
 
 
 	int getBestActionFromNode(int carNumber) {
@@ -305,10 +328,11 @@ public:
 			if (e == edgeToConclude) {
 				continue;
 			}
-			bool is_sender = agent.getCar().getCarNumber() == e->getCarNumberSender();
-			sumofmki = sumofmki + is_sender ? e->getBestResponceSendAction(action) : e->getBestResponceReceiveAction(action);
+			bool is_i = agent.getCar().getCarNumber() == e->getCarNumberI();
+			sumofmki = sumofmki + is_i ? e->getBestM_ifJgetsActionI(action) : e->getBestM_ifIgetsActionJ(action);
+
 		}
-		return sumofmki/availableActions;
+		return sumofmki;
 	}
 
 	/*	Getter and setter for the number of agents  */

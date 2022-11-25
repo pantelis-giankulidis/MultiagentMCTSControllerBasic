@@ -50,15 +50,8 @@ void carAction::execute(laneFreeState& state) {
 	// Compute other car's dynamics
 	// Assume no acceleration applied
 	int index = 0;
-	srand(time(NULL));
-
-	int randx = 0;
-	int randy = 0;
 	for (Car c : state.getParticipatingCars()) {
-		randy = (rand() % lateralAccelerationValues.size());
-		randx = (rand() % longitudinalAccelerationValues.size());
 		c.setPosition(c.getPositionX() + c.getVelocityX() * SIMULATION_CONSTANT_TIME, c.getPositionY() + c.getVelocityY() * SIMULATION_CONSTANT_TIME);
-		c.setVelocity(c.getVelocityX() + randx * SIMULATION_CONSTANT_TIME, c.getVelocityY() + randy * SIMULATION_CONSTANT_TIME);
 		state.updateCar(c, index);
 		index++;
 	}
@@ -205,14 +198,28 @@ laneFree_MonteCarloSimulation_strategy::laneFree_MonteCarloSimulation_strategy(l
 
 void laneFree_MonteCarloSimulation_strategy::generateRandom(carAction& action) {
 	double desiredSpeed = state->getControlledCar().getDesiredSpeed();
-	int x = longitudinalDistribution(state->getControlledCar().getVelocityX(), desiredSpeed).generateNext();
-	int y = lateralDistribution(state->getControlledCar().getVelocityY()).generateNext();
-	//int x = 2;
-	//int y = 2;
-	//std::cout << "Acceel" << std::endl;
-	//std::cout << "acceleration to apply " << longitudinalAccelerationValues[x] << " , " << lateralAccelerationValues[y] << std::endl;
-	action.setLateralAccelerationValue(lateralAccelerationValues[y]);
-	action.setLongitudinalAccelerationValue(longitudinalAccelerationValues[x]);
+
+	/***
+	* Case of diagonal movements
+	*/
+	//int x = longitudinalDistribution(state->getControlledCar().getVelocityX(), desiredSpeed).generateNext();
+	//int y = lateralDistribution(state->getControlledCar().getVelocityY()).generateNext();
+	//action.setLateralAccelerationValue(lateralAccelerationValues[y]);
+	//action.setLongitudinalAccelerationValue(longitudinalAccelerationValues[x]);
+
+	/*
+	* Case of cross movements
+	*/
+	int x = 0, y = 0;
+	int act = rand() % availableActions;
+	if (act < 3) {
+		x = act;
+	}
+	else {
+		y = act;
+	}
+	action.setLateralAccelerationValue(AccelerationValues[y]);
+	action.setLongitudinalAccelerationValue(AccelerationValues[x]);
 }
 
 
@@ -301,7 +308,7 @@ bool finalState::isTerminal(const laneFreeState& state) {
 
 	for (Car c2 : carsInTheRoad) {
 
-		minDistanceY = ((c.getWidth() / 2) + (c2.getWidth() / 2)) + SAFETY_GAP;
+		minDistanceY = ((c.getWidth() / 2) + (c2.getWidth() / 2)) + SAFETY_GAP/2;
 		minDistanceX = ((c.getLength() / 2) + (c2.getLength() / 2)) + SAFETY_GAP;
 
 		diffInX = c.getPositionX() > c2.getPositionX() ? c.getPositionX() - c2.getPositionX() : c2.getPositionX() - c.getPositionX();
@@ -338,7 +345,6 @@ bool finalState::isTerminal(const laneFreeState& state) {
 
 
 /* IMPLEMENTATIONS FOR THE FUNCTIONS OF THE FactoredValueMCTS.hpp HEADER FILE.
-* 
 * @ main - The initial function that executes the entire algorithm.
 * @ updateGraphStats - Update the values in the edges and the nodes of the coordination graph, based on the results
 *		of the simulations.
@@ -350,11 +356,16 @@ void factoredValueMCTS::main(laneFreeGlobalState s) {
 	graphSolver.createGraph(s);
 
 	while (simulations > 0) {
-		simulate(s, graphSolver, 0, FVMCTS_GAMMA);//initial depth=0
+		simulate(s, graphSolver, 0);//initial depth=0
 		simulations--;
 	}
-	graphSolver.updateNodeExplorationFlag(0);
-	graphSolver.coordinateActions();
+
+	// Run maxplus with no exploration to get the final coordinated action
+	graphSolver.updateNodeExplorationFlag(1);
+	graphSolver.setC(0);
+	//graphSolver.printGraph();
+	graphSolver.maxplus();
+
 }
 
 /* Updates the statistics of the graph, every time after a 'simulate' iteration
@@ -365,34 +376,31 @@ void factoredValueMCTS::main(laneFreeGlobalState s) {
 * return: Void
 */
 
-void factoredValueMCTS::updateGraphStats(laneFreeGlobalState s, MaxPlus step,std::map<int,float> qi) {
+void factoredValueMCTS::updateGraphStats(laneFreeGlobalState s, MaxPlus step) {
 
 	for (int i = 0; i < maxPlusGraph.size(); i++) {
 		node nod = maxPlusGraph[i];
-
+		//std::cout << "nod.getN()=" << nod.getN() << std::endl;
+		//std::cout << "nod.getNi()[actionIndex] = " << nod.getNi()[actionIndex] << std::endl;
 		//Update node statistics
 		nod.setN(nod.getN() + 1);
 		
 		int actionIndex = nod.getTemporaryBestActionIndex();
 		nod.setNi(actionIndex, nod.getNi()[actionIndex] + 1); // Ni=Ni+1
-		nod.setQ(actionIndex, nod.getQ()[actionIndex] + (qi[nod.getCar().getCarNumber()] - nod.getQ()[actionIndex]) / nod.getNi()[actionIndex]); // Q' = Q'+(qi-Q')/Ni
-		// Normalize Q
-		nod.setQ(actionIndex, nod.getQ()[actionIndex] / availableActions);
+		nod.setQ(actionIndex, nod.getQ()[actionIndex] + (nod.getBestActionValue(actionIndex) - nod.getQ()[actionIndex]) / nod.getNi()[actionIndex]); // Q' = Q'+(qi-Q')/Ni
 
 		//Update edge statistics
 		std::vector<edge*> tmpAdjacencyList = nod.getAdjacencyList();
 		for (int j = 0; j < tmpAdjacencyList.size(); j++) {
 			edge* edg = tmpAdjacencyList[j];
 
-			float qe = qi[nod.getCar().getCarNumber()] + 
-				qi[(nod.getCar().getCarNumber()==edg->getCarNumberSender())?edg->getCarNumberReceiver():edg->getCarNumberSender()]; //qe = qi+qj
+			float qe = edg->getBestActionValueI() + edg->getBestActionValueJ(); //qe = qi+qj
+			float QIJ = edg->getQij()[edg->getBestActionIndexI()][edg->getBestActionIndexJ()];
 
-			float QIJ = edg->getQij()[edg->getBestActionIndexSender()][edg->getBestActionIndexReceiver()];
-
-			edg->setNij(edg->getBestActionIndexSender(), edg->getBestActionIndexReceiver(),
-				edg->getNij()[edg->getBestActionIndexSender()][edg->getBestActionIndexReceiver()] + 1);
-			edg->setQij(edg->getBestActionIndexSender(), edg->getBestActionIndexReceiver(),
-				QIJ + ((qe - QIJ) / edg->getNij()[edg->getBestActionIndexSender()][edg->getBestActionIndexReceiver()]));
+			edg->setNij(edg->getBestActionIndexI(), edg->getBestActionIndexJ(),
+				edg->getNij()[edg->getBestActionIndexI()][edg->getBestActionIndexJ()] + 1);
+			edg->setQij(edg->getBestActionIndexI(), edg->getBestActionIndexJ(),
+				QIJ + ((qe - QIJ) / edg->getNij()[edg->getBestActionIndexI()][edg->getBestActionIndexJ()]));
 
 			tmpAdjacencyList[j] = edg;
 		}
@@ -439,52 +447,6 @@ laneFreeGlobalState factoredValueMCTS::generateNewState(laneFreeGlobalState s) {
 }
 
 
-
-/* Computes the reward the entire system has, from moving from state s to the state s',
-*  by taking the action a'
-*/
-std::map<int, float> factoredValueMCTS::computeImediateReward(laneFreeGlobalState s, laneFreeGlobalState s_star) {
-	
-	std::map<int, float> mapcar;
-	for (int i = 0; i < maxPlusGraph.size(); i++) {
-		node r = maxPlusGraph[i];
-		// Find the car in the state s and in the state s_star
-		Car car_s = Car();
-		Car car_s_star = Car();
-		for (int j = 0; j < s.getNumberOfCarsInRoads(); j++) {
-			if (s.getCar(j).getCarNumber() == r.getCar().getCarNumber()) {
-				car_s = s.getCar(j);
-			}
-		}
-		for (int j = 0; j < s_star.getNumberOfCarsInRoads(); j++) {
-			if (s_star.getCar(j).getCarNumber() == r.getCar().getCarNumber()) {
-				car_s_star = s_star.getCar(j);
-			}
-		}
-
-		// Get nearby cars in state s_star
-		std::vector<Car> adjecencyList;
-		for (edge* e : r.getAdjacencyList()) {
-			if (e->getCarNumberSender() == r.getCar().getCarNumber()) {
-				adjecencyList.push_back(s_star.getCarByNumber(e->getCarNumberReceiver()));
-			}
-			else {
-				adjecencyList.push_back(s_star.getCarByNumber(e->getCarNumberSender()));
-			}
-		}
-
-
-		// Compute the reward of that car
-		int actionIndex = r.getTemporaryBestActionIndex();
-		float reward = imediateReward(car_s, car_s_star, adjecencyList);
-		
-		mapcar[r.getCar().getCarNumber()] = reward;
-		
-	}
-	return mapcar;
-}
-
-
 /* Computes the reward the entire system has, from moving from state s to the state s',
 *  by taking the action a'
 */
@@ -510,11 +472,11 @@ void factoredValueMCTS::computeFactoredImediateReward(laneFreeGlobalState s, lan
 		// Get nearby cars in state s_star
 		std::vector<Car> adjecencyList;
 		for (edge* e : r.getAdjacencyList()) {
-			if (e->getCarNumberSender() == r.getCar().getCarNumber()) {
-				adjecencyList.push_back(s_star.getCarByNumber(e->getCarNumberReceiver()));
+			if (e->getCarNumberI() == r.getCar().getCarNumber()) {
+				adjecencyList.push_back(s_star.getCarByNumber(e->getCarNumberJ()));
 			}
 			else {
-				adjecencyList.push_back(s_star.getCarByNumber(e->getCarNumberSender()));
+				adjecencyList.push_back(s_star.getCarByNumber(e->getCarNumberI()));
 			}
 		}
 
@@ -524,8 +486,8 @@ void factoredValueMCTS::computeFactoredImediateReward(laneFreeGlobalState s, lan
 		float reward = imediateReward(car_s, car_s_star, adjecencyList);
 
 
-		//r.setActionValue(actionIndex, reward + gamma * r.getTemporaryBestActionValue());//q=r+g*SIMULATE
-		r.setActionValue(actionIndex, r.getBestActionValue(actionIndex) + gamma * reward);
+		r.setActionValue(actionIndex, reward + gamma * r.getTemporaryBestActionValue());//q=r+g*SIMULATE
+
 		maxPlusGraph[i] = r;
 	}
 
@@ -535,24 +497,21 @@ void factoredValueMCTS::computeFactoredImediateReward(laneFreeGlobalState s, lan
 /*One round of MCTS simulation,for the case of global state.
 *
 */
-std::map<int, float> factoredValueMCTS::simulate(laneFreeGlobalState s, MaxPlus step, int depth,float gamma) {
-	
-	step.coordinateActions(); //Apply max plus algorithm to the graph.
-	laneFreeGlobalState s_star = generateNewState(s);
-	std::map<int, float> r = computeImediateReward(s, s_star);
+int factoredValueMCTS::simulate(laneFreeGlobalState s, MaxPlus step, int depth) {
 	if (depth == MAX_FVMCTS_DEPTH) {
-		return r;
-	}
-	std::map<int, float> ri = simulate(s_star, step, depth + 1,gamma*gamma);
-	std::map<int, float> qi;
-
-	for (auto it = ri.begin(); it != ri.end(); it++) {
-		qi[it->first] = r[it->first] + gamma * ri[it->first];
+		return 0;
 	}
 
-	updateGraphStats(s, step,qi);
+	step.maxplus(); //Apply max plus algorithm to the graph.
 
-	return r;
+	laneFreeGlobalState s_star = generateNewState(s);
+	
+	simulate(s_star, step, depth + 1);
+
+	computeFactoredImediateReward(s, s_star, pow(FVMCTS_GAMMA, depth));
+
+	updateGraphStats(s, step);
+
 }
 
 

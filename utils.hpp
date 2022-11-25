@@ -8,35 +8,34 @@
 #include <cstdlib>
 #include <map>
 #include <tuple>
-#include <algorithm>
+
 
 #define SIMULATION_CONSTANT_TIME 0.25
 #define SIMULATION_CONSTANT_TIME_SQUARED 0.04
 #define MAX_ACCELERATION 4
-#define LONGITUDINAL_ACTIONS 3
+#define LONGITUDINAL_ACTIONS 5
 #define LATERAL_ACTIONS 3
 #define MIN_DESIRED_SPEED 25
 #define MAX_DESIRED_SPEED 35
 #define ROAD_WIDTH 10.2
 #define ROAD_SAFETY_GAP 0.25 
-#define GAMMA 0
-#define epsilon 0.001
-#define SUMO_CAR_LENGTH 3.2
-#define SUMO_CAR_WIDTH 2
+#define GAMMA 0.6
+#define epsilon 1
+#define SUMO_CAR_LENGTH 2
 
 /*Factored value MCTS hyperparameters*/
-#define MAX_FVMCTS_DEPTH 2
-#define FVMCTS_GAMMA 0.35
-#define SIMULATIONS_FROM_ROOT 40
-#define DISTANCE_FOR_CREATING_EDGE 20
-#define EXPLORATION_TERM 3.88f
-#define ALPHA 0.91
-#define BETA 1.15
+#define MAX_FVMCTS_DEPTH 3
+#define FVMCTS_GAMMA 0.95
+#define SIMULATIONS_FROM_ROOT 12
+#define DISTANCE_FOR_CREATING_EDGE 35
+#define EXPLORATION_TERM 0.5
+#define ALPHA 10
+#define BETA 50
 
 
 /*Max Plus hyperparameters */
 #define maxPlusMessagePassingPerRound 2
-#define maxPlusMCSimulationRounds 3
+#define maxPlusMCSimulationRounds 2
 
 
 /*Potential field parameters*/
@@ -82,13 +81,14 @@
 #define WALL_DN(point, safety, v, y, w, T, uymax_hard) U_lemma33(T, -(safety)*v, MAXIMUM(0, y-0.5*w - (point)), -uymax_hard)
 #define WALL_UP(point, safety, v, y, w, T, uymax_hard) U_lemma33(T, +(safety)*v, MAXIMUM(0, (point) - (y+0.5*w)), -uymax_hard)
 
-
-/*UTILS OF PLAIN MCTS*/
 #define SAFETY_GAP 1
 
 
-const std::vector<double> longitudinalAccelerationValues{-2,2,0,-1,1 };
-const std::vector<double> lateralAccelerationValues{ 0,-1,1};
+const std::vector<double> longitudinalAccelerationValues{ -5,-2,0,2,5 };
+const std::vector<double> lateralAccelerationValues{ 0,-1,1 };
+// For the case of cross movements
+const std::vector<double> AccelerationValues{ 0,-2,2,-1,1 };
+
 const int availableActions = 5;
 
 
@@ -198,12 +198,53 @@ public:
 	int carsOutOfBounds;
 	double sumOfDifferencesFromDesiredSpeed;
 
-	timestampStatistics(double timestamp, int cars, int collisions, int carsOutOfBounds, double sumOfDifferencesFromDesiredSpeed) {
+	/*Case of car exampel trajectories*/
+	double car1speedx;
+	double car1speedy;
+	double car1posx, car1posy;
+	double car2speedx;
+	double car2speedy;
+	double car2posx, car2posy;
+
+	double car3speedx;
+	double car3speedy;
+	double car3posx, car3posy;
+
+	double car4speedx;
+	double car4speedy;
+	double car4posx, car4posy;
+
+
+	timestampStatistics(double timestamp, int cars, int collisions, int carsOutOfBounds, double sumOfDifferencesFromDesiredSpeed,
+		double c1x,double c1y,double c1xpos,double c1ypos,
+		double c2x,double c2y,double c2xpos,double c2ypos,
+		double c3x,double c3y,double c3xpos,double c3ypos,
+		double c4x,double c4y,double c4xpos,double c4ypos) {
 		this->timestamp = timestamp;
 		this->cars = cars;
 		this->collisions = collisions;
 		this->carsOutOfBounds = carsOutOfBounds;
 		this->sumOfDifferencesFromDesiredSpeed = sumOfDifferencesFromDesiredSpeed;
+
+		this->car1speedx = c1x;
+		this->car1speedy = c1y;
+		this->car1posx = c1xpos;
+		this->car1posy = c1ypos;
+
+		this->car2speedx = c2x;
+		this->car2speedy = c2y;
+		this->car2posx = c2xpos;
+		this->car2posy = c2ypos;
+
+		this->car3speedx = c3x;
+		this->car3speedy = c3y;
+		this->car3posx = c3xpos;
+		this->car3posy = c3ypos;
+
+		this->car4speedx = c4x;
+		this->car4speedy = c4y;
+		this->car4posx = c4xpos;
+		this->car4posy = c4ypos;
 	}
 
 	double getAverageDifferenceFromDesiredSpeed() {
@@ -214,30 +255,30 @@ public:
 
 class edge {
 private:
-	int carNumberSender;
-	int carNumberReceiver;
+	int carINumber;
+	int carJNumber;
 
-	/*Vector representing the joint temporary utility of all the actions of the agent 'Sender',for all available actions of the agent j.
-	It is different than mReceiver. It is used in the MaxPlus algorithm.
+	/*Vector representing the joint temporary utility of all the actions of the agent i,for all available actions of the agent j.
+	It is different than mji. It is used in the MaxPlus algorithm.
 	*
 	* First index is for the car with the car1Number number.
 	* Second index for the car with the car2Number number.
 	*/
-	std::vector<std::vector<float>> mSender;
+	std::vector<std::vector<float>> mij;
 
-	/*Vector representing the joint temporary utility of all the actions of the agent 'Receiver',for all available actions of the agent i.
-	It is different than mSender. It is used in the MaxPlus algorithm.
+	/*Vector representing the joint temporary utility of all the actions of the agent j,for all available actions of the agent i.
+	It is different than mij. It is used in the MaxPlus algorithm.
 	*
 	* First index is for the car with the car1Number number.
 	* Second index for the car with the car2Number number.
 	*/
-	std::vector<std::vector<float>> mReceiver;
+	std::vector<std::vector<float>> mji;
 
 
 	/*Vector representing all possible couples of actions between the two agents and their value
 	*
-	* First index is for the car with the sender car number.
-	* Second index for the car with the receiver car number.
+	* First index is for the car with the car1Number number.
+	* Second index for the car with the car2Number number.
 	*/
 	std::vector<std::vector<float>> Qij;
 
@@ -246,62 +287,62 @@ private:
 	*/
 	std::vector<std::vector<int>> Nij;
 
-	/* Variables storing the current best actions for the agents pointing to this edge.
-	* The purpose for doing so, is to avoid looping in the coordinated graph to take the aj when
+	/* Variable storing the current best actions for the agents pointing to this edge.
+	* The purpose for dong so, is to avoid looping in the coordinated graph to take the aj when
 	* the algorithm is in the message passing phase.
 	*/
-	float bestActionValueSender;
-	float bestActionValueReceiver;
-	int bestActionIndexSender;
-	int bestActionIndexReceiver;
+	float bestActionValueI;
+	float bestActionValueJ;
+	int bestActionIndexI;
+	int bestActionIndexJ;
 
 
 
 public:
 	edge(int carINumber, int carJNumber) {
-		this->carNumberSender = carINumber;
-		this->carNumberReceiver = carJNumber;
+		this->carINumber = carINumber;
+		this->carJNumber = carJNumber;
 
 		// Calculate all available actions aj for agent j.
-		this->mSender = std::vector<std::vector<float>>(availableActions, std::vector<float>(availableActions, 0.0));
-		this->mReceiver = std::vector<std::vector<float>>(availableActions, std::vector<float>(availableActions, 0));
+		this->mij = std::vector<std::vector<float>>(availableActions, std::vector<float>(availableActions, 0.0));
+		this->mji = std::vector<std::vector<float>>(availableActions, std::vector<float>(availableActions, 0));
 		this->Qij = std::vector<std::vector<float>>(availableActions, std::vector<float>(availableActions, 0));
 		this->Nij = std::vector<std::vector<int>>(availableActions, std::vector<int>(availableActions, 0));
 
 
 	}
 
-	std::vector<std::vector<float>> getMSender() {
-		return this->mSender;
+	std::vector<std::vector<float>> getMij() {
+		return this->mij;
 	}
 
-	void setMSender(int indexi, int indexj, float value) {
-		/*if (value > 100) {
-			std::cout << "PPPP  " << "I=" << carNumberSender << ",indexi = " << indexi << ", J=" << carNumberReceiver << ", indexj = " << indexj << std::endl;
-		}*/
-		this->mSender[indexi][indexj] = value;
+	void setMij(int indexi, int indexj, float value) {
+		this->mij[indexi][indexj] = value;
 	}
 
-	std::vector<std::vector<float>> getMReceiver() {
-		return this->mReceiver;
+	std::vector<std::vector<float>> getMji() {
+		return this->mji;
 	}
 
-	void setMReceiver(int indexi, int indexj, float value) {
-		this->mReceiver[indexi][indexj] = value;
+	void setMji(int indexi, int indexj, float value) {
+		//std::cout << "SETTING mji for " << indexi << ", " << indexj << "  is " << value << std::endl;
+		this->mji[indexi][indexj] = value;
 	}
 
-	void initialiseMSender() {
+
+
+	void initialiseMij() {
 		for (int i = 0; i < availableActions; i++) {
 			for (int j = 0; j < availableActions; j++) {
-				this->mSender[i][j] = 0;
+				this->mij[i][j] = 0;
 			}
 		}
 	}
 
-	void initialiseMReceiver() {
+	void initialiseMji() {
 		for (int i = 0; i < availableActions; i++) {
 			for (int j = 0; j < availableActions; j++) {
-				mReceiver[i][j] = 0;
+				mji[i][j] = 0;
 			}
 		}
 	}
@@ -324,57 +365,58 @@ public:
 		return Nij;
 	}
 
-	void setCarNumberSender(int carINumber) {
-		this->carNumberSender = carINumber;
+	void setCarNumberI(int carINumber) {
+		this->carINumber = carINumber;
 	}
 
-	int getCarNumberSender() {
-		return carNumberSender;
+	int getCarNumberI() {
+		return carINumber;
 	}
 
-	void setCarNumberReceiver(int carJNumber) {
-		this->carNumberReceiver = carJNumber;
+	void setCarNumberJ(int carJNumber) {
+		this->carJNumber = carJNumber;
 	}
 
-	int getCarNumberReceiver() {
-		return carNumberReceiver;
+	int getCarNumberJ() {
+		return carJNumber;
 	}
 
-	void setBestActionValueSender(float value) {
-		this->bestActionValueSender = value;
+	void setBestActionValueI(float value) {
+		this->bestActionValueI = value;
 	}
 
-	float getBestActionValueSender() {
-		return bestActionValueSender;
+	float getBestActionValueI() {
+		return bestActionValueI;
 	}
 
-	void setBestActionValueReceiver(float value) {
-		this->bestActionValueReceiver = value;
+	void setBestActionValueJ(float value) {
+		this->bestActionValueJ = value;
 	}
 
-	float getBestActionValueReceiver() {
-		return bestActionValueReceiver;
+	float getBestActionValueJ() {
+		return bestActionValueJ;
 	}
 
-	void setBestActionIndexSender(int index) {
-		this->bestActionIndexSender = index;
+
+
+	void setBestActionIndexI(int index) {
+		this->bestActionIndexI = index;
 	}
 
-	float getBestActionIndexSender() {
-		return bestActionIndexSender;
+	float getBestActionIndexI() {
+		return bestActionIndexI;
+	}
+	void setBestActionIndexJ(int index) {
+		this->bestActionIndexJ = index;
 	}
 
-	void setBestActionIndexReceiver(int index) {
-		this->bestActionIndexReceiver = index;
+	float getBestActionIndexJ() {
+		return bestActionIndexJ;
 	}
 
-	float getBestActionIndexReceiver() {
-		return bestActionIndexReceiver;
-	}
-
-	float getBestResponceReceiveAction(int index) {
+	float getBestM_ifIgetsActionJ(int index) {
 		float max = -1000;
-		for (std::vector<float> row : mSender) {
+		for (std::vector<float> row : mij) {
 			if (row[index] > max) {
 				max = row[index];
 			}
@@ -382,9 +424,10 @@ public:
 		return max;
 	}
 
-	float getBestResponceSendAction(int index) {
+	float getBestM_ifJgetsActionI(int index) {
 		float max = -1000;
-		for (std::vector<float> row : mReceiver) {
+		for (std::vector<float> row : mji) {
+			//std::cout << "For action " << index << " best responce: " << row[index] << std::endl;
 			if (row[index] > max) {
 				max = row[index];
 			}
@@ -392,38 +435,18 @@ public:
 		return max;
 	}
 
-	void printMSender() {
-		for (std::vector<float> row : mSender) {
-			std::cout << "[" << std::endl;
-			for (float g : row) {
-				std::cout << g << ",";
-			}
-			std::cout << "]" << std::endl;
-		}
-	}
-
-	void printMReceiver() {
-		for (std::vector<float> row : mReceiver) {
-			std::cout << "[" << std::endl;
-			for (float g : row) {
-				std::cout << g << ",";
-			}
-			std::cout << "]" << std::endl;
-		}
-	}
-
-	float getMSenderRowSum(int indexColumn) {
+	float getMijRowSum(int indexRow) {
 		float totalSum = 0;
 		for (int i = 0; i < availableActions; i++) {
-			totalSum = totalSum + mSender[i][indexColumn];
+			totalSum = totalSum + mij[indexRow][i];
 		}
 		return totalSum;
 	}
 
-	float getMReceiverRowSum(int indexColumn) {
+	float getMjiRowSum(int indexRow) {
 		float totalSum = 0;
 		for (int i = 0; i < availableActions; i++) {
-			totalSum = totalSum + mReceiver[i][indexColumn];
+			totalSum = totalSum + mji[indexRow][i];
 		}
 		return totalSum;
 	}
@@ -446,27 +469,16 @@ private:
 	std::vector<int> Ni; // The times each possible move has been selected 
 	std::vector<edge*> adjacencyList; // Edges of the graph
 
-
-	std::vector<float> tempQforMaxPlus;
-
 public:
 	node(Car car) {
 		this->car = car;
 		this->N = 0;
-		this->Q = std::vector<float>(availableActions, 0);//Initialize quality of move
+		this->Q = std::vector<float>(availableActions, 1);//Initialize quality of move
 		this->Ni = std::vector<int>(availableActions, 1);
 		this->temporaryBestActionIndex = 2;//zero acceleration
 		this->temporaryBestActionValue = 0;
 		this->actionValues = std::vector<float>(availableActions, 0.0);
 		this->bestAction = 2;//zero acceleration
-		this->tempQforMaxPlus = std::vector<float>(availableActions, 0.0);
-	}
-
-	void printTempQ() {
-		std::cout << "Car : " << car.getCarNumber() << std::endl;
-		for (float f : tempQforMaxPlus) {
-			std::cout << f << std::endl;
-		}
 	}
 
 	void setAdjacencyList(std::vector<edge*> list) {
@@ -548,25 +560,18 @@ public:
 	}
 
 	int getN() {
-		int n = 0;
-		for (int i : Ni) {
-			n = n + i;
-		}
-		return n;
+		return N;
 	}
 
 	int getBestAction() {
 		int action = 0;
-		float actionValue = -10000;
-		for (int f = 0; f < Q.size(); f++) {
-			float sumofmki = 0;
-			for (edge* e : adjacencyList) {
-				bool is_i = getCar().getCarNumber() == e->getCarNumberSender();
-				sumofmki = sumofmki + is_i ? e->getBestResponceReceiveAction(f) : e->getBestResponceSendAction(f);
-			}
+		float actionValue = 0;
+		//std::cout << "///NEW CAR////" << std::endl;
+		for (int f = 0; f < actionValues.size(); f++) {
+			//std::cout << "Action " << f << " , value: " << actionValues[f] << std::endl;
 
-			if (Q[f] > actionValue) {
-				actionValue = Q[f];// +sumofmki;
+			if (actionValues[f] > actionValue) {
+				actionValue = actionValues[f];
 				action = f;
 			}
 		}
@@ -577,47 +582,6 @@ public:
 		this->adjacencyList[index] = e;
 	}
 
-	void printActionsValues() {
-		
-		for (int f = 0; f < Q.size(); f++) {
-			float sumofmki = 0;
-			for (edge* e : adjacencyList) {
-				bool is_i = getCar().getCarNumber() == e->getCarNumberSender();
-				sumofmki = sumofmki + is_i ? e->getBestResponceReceiveAction(f) : e->getBestResponceSendAction(f);
-				if (is_i) {
-					std::cout << "$$$$ For agent in edge: " << e->getCarNumberReceiver() << std::endl;
-					std::cout << sumofmki << std::endl;
-				}
-				else {
-					std::cout << "$$$$ For agent in edge: " << e->getCarNumberSender() << std::endl;
-					std::cout << sumofmki << std::endl;
-				}
-			}
-			std::cout << "  Action -> " << Q[f] << ", summki-> " << sumofmki << std::endl;
-		}
-	}
-
-	void printQ() {
-		std::cout << "For car::: " << car.getCarNumber() << std::endl;
-		for (float q : Q) {
-			std::cout << q << std::endl;
-		}
-	}
-	std::vector<float> getTempQForMaxPlus() {
-		return this->tempQforMaxPlus;
-	}
-
-	void setTempQForMaxPlus(const std::vector<float>& q) {
-		this->tempQforMaxPlus = q;
-	}
-
-	int getSumN() {
-		int s = 0;
-		for (int i : Ni) {
-			s += i;
-		}
-		return s;
-	}
 };
 
 /*Class representing statistics for individual node*/
@@ -667,8 +631,6 @@ Car applyDynamics(Car c, int indexActionX, int indexActionY);
 
 float imediateReward(Car c, Car c_star, std::vector<Car> adjacencyList);
 
-float exitingRoadPenalty(Car c);
-
 float betweenCarsReward(Car c, Car c1);
 
 
@@ -690,9 +652,13 @@ float getAvgNodeScore(unsigned int id);
 void updateNodeScore(unsigned int id, float score);
 
 
-
+/*
+Init cars functions
+*/
 void initializeSimulationOne();
 void initializeSimulationTwo();
 void initializeSimulationThree();
 void initializeSimulationFour();
+
+
 #endif
