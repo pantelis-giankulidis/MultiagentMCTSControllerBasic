@@ -355,15 +355,15 @@ void factoredValueMCTS::main(laneFreeGlobalState s) {
 	MaxPlus graphSolver = MaxPlus(s.getNumberOfCarsInRoads());
 	graphSolver.createGraph(s);
 
+	/* Iterate phase of the algorithm. */
 	while (simulations > 0) {
-		simulate(s, graphSolver, 0);//initial depth=0
+		simulate(s, graphSolver, 0);// One round of max-plus simulation
 		simulations--;
 	}
 
 	// Run maxplus with no exploration to get the final coordinated action
 	graphSolver.updateNodeExplorationFlag(1);
 	graphSolver.setC(0);
-	//graphSolver.printGraph();
 	graphSolver.maxplus();
 
 }

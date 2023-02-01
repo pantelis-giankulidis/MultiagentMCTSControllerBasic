@@ -26,27 +26,32 @@
 
 std::vector<timestampStatistics> stats{};
 
-std::ofstream myFile;// ("C:\Users\pgian\Documents\stats.csv");
+std::ofstream myFile;
 std::ofstream logFile;
 std::ofstream logFile9;
 std::ofstream logFile12;
 
 
-
+/*
+* Takes sumo cars and an index and creates an instance of a Car object.
+* 
+*/
 Car createCarFromSumo(int index, NumericalID* myids) {
 	Car c = Car(index);
-
 	c.setPosition(get_position_x(myids[index]), get_position_y(myids[index]));
-
 	c.setVelocity(get_speed_x(myids[index]), get_speed_y(myids[index]));
-
 	c.setDimensions(get_veh_length(myids[index]), get_veh_width(myids[index]));
-
 	c.setDesiredSpeed(get_desired_speed(myids[index]));
-
 	return c;
 }
 
+
+
+/*
+* Functions that simulate the scenarios in the multi-agent approach of the algorithm.
+* They initialize manually the positions and velocities of the cars.
+* 
+*/
 void initializeSimulationOne() {
 	insert_new_vehicle("lane_free_car_plugin_0", "route0", "lane_free_car", 10, 8, 28, 0, 0);
 	insert_new_vehicle("lane_free_car_plugin_1", "route0", "lane_free_car", 2.5, 8.5, 28, 0, 0);
@@ -76,74 +81,76 @@ void initializeSimulationFour() {
 	insert_new_vehicle("lane_free_car_plugin_3", "route0", "lane_free_car", 15, 5, 28, 0, 0);
 }
 
+
+/*
+* Runs once at the start of the simulation.
+* 
+* It initializes the files to write the statistics at each time-stamp, generates the multi-agent case manual simulations
+* that can be optionally used
+* 
+*/
 void simulation_initialize() {
 
-	//Log file open
-	//
+
 	logFile.open("log.csv");
 	logFile9.open("log9.txt");
 	logFile12.open("log12.txt");
 	
 	logFile << "vehicle,desspeed" << std::endl;
+
 	initializeScores();
 
-	//initialize srand with the same seed as sumo
-	srand(get_seed());
-	//srand(time(0));
+	//initialize seeds 
+	//srand(get_seed());
+	srand(time(0));
 
 
-	/*Insert vehicles */
+	/*Insert vehicles manually for the case of the multi-agent experiments.
+	In the plain MCTS case, this initialization is useless, because SUMO places the vehicles in the road.
+	*/
 	//initializeSimulationOne();
 	//initializeSimulationTwo();
 	//initializeSimulationThree();
-	initializeSimulationFour();
-
-
-	//insert 20 vehicles
-	int n_init = 0;
-
-	double x_incr = 25, y_incr = 2.5, vx_incr = 5;
-	double x_val = x_incr, y_val = y_incr, vx_val = vx_incr, vy_val = 0;
-	int virtual_lanes = 3;
-	double width = 10;
-
-
-	char veh_name[40];
-	//route_id and type_id should be defined in the scenario we are running
-	char route_id[20] = "route0";
-	char type_id[20] = "1";
-	NumericalID v_id;
-	for (int i = 0; i < n_init; i++) {
-
-		sprintf(type_id, "%d", i % 8 + 1);
-		sprintf(veh_name, "%s_plugin_%d", type_id, (i + 1));
-
-		v_id = insert_new_vehicle(veh_name, route_id, type_id, x_val, y_val, vx_val, vy_val, 0);
-		printf("%s inserted\n", veh_name);
-		y_val = y_val + y_incr;
-		if (i % virtual_lanes == (virtual_lanes - 1)) {
-			x_val += x_incr;
-			if (vx_val < 35) {
-				vx_val += vx_incr;
-			}
-
-			y_val = y_incr;
-		}
-
-	}
-
-
+	//initializeSimulationFour();
 
 }
 
+
+
+/*
+* Runs at every simulation time-step. Every time-step is the road situation every x seconds in the sumo world, where x is
+* managed by sumo simulator settings.In our experiments, this is 0.20seconds or 0.25seconds
+* 
+* 
+* In every step, the algorithm runs independently without any "memory" for any previous simulation.
+* 
+* After the necessary memory allocation for storing the simulation statistics, the algortihm sees the
+* RUNNING_AS_INDEPENDENT_AGENTS hyperparameter.
+* 
+* If it is 1, the plain MCTS algorithm is run.
+* If it is 0, the multi-agent algorithm is run.
+* 
+*/
 void simulation_step() {
+
+	/*
+	* Get the current road status.
+	*/
 	NumericalID* myids = get_lane_free_ids();
 	NumericalID n_myids = get_lane_free_ids_size();
 
+
+	/*
+	* Initialize timestamp's statistics.
+	*/
 	int collissionsOnTimestamp = 0;
 	int outOfRoadOnTimestamp = 0;
 
-	// Allocate memory for statistics in this timestamp
+
+	/* Allocate memory for statistics in this timestamp
+	* 
+	* 
+	* */
 	if (stats.begin() == stats.end() || stats.back().timestamp != get_current_time_step()) {
 		timestampStatistics st = timestampStatistics(get_current_time_step(), n_myids, 0, 0, 0,
 			get_speed_x(myids[0]),get_speed_y(myids[0]), get_position_x(myids[0]),get_position_y(myids[0]),
@@ -153,6 +160,10 @@ void simulation_step() {
 		stats.push_back(st);
 	}
 
+
+	/*
+	* Set parameters for this timestamp.
+	*/
 	int MCTSCars = 1;
 	int visibilityTarget = 50;
 	double pos_x, pos_y, speed, speed_y, des_speed, ux, uy, length, width, TS = get_time_step_length();
@@ -160,29 +171,41 @@ void simulation_step() {
 	int i, j;
 	char* vname;
 
-	//printf("timestep:%d\n", n_myids);
 
-
-	//PART TWO: Scalable tree search
-	// Initiate statistics for the nodes and the edges of the coordination graph that will be created.
+	/*
+	* PART TWO: Scalable tree search
+	* ------------------------------------------------------------
+	* Algorithm that runs in the multi-agent case. The RUNNING_AS_INDEPENDENT_AGENTS is modified manually
+	* by us before compiling, depending in the algortihm to run for the simulation.
+	*/
 	if (RUNNING_AS_INDEPENDENT_AGENTS == 0) {
-		std::cout << "--------------------------------------------------------" << std::endl;
+		/*
+		* Initialize the 'global' state of the road.
+		*/
 		laneFreeGlobalState state = laneFreeGlobalState();
 		for (int j = 0; j < n_myids; j++) {
 			Car car = createCarFromSumo(j, myids);
 			state.addCar(car);
 		}
 
+
+		/*
+		* Run the algorithm for every vehicle.
+		*/
 		if (state.getNumberOfCarsInRoads() > 1) {
+
+
 			factoredValueMCTS mcts = factoredValueMCTS();
+
+			/* The core impementation of the algorithm*/
 			mcts.main(state);
+
 
 			for (node nod : maxPlusGraph) {
 				int actionIndex = nod.getBestAction();
 				std::div_t action = std::div(actionIndex, longitudinalAccelerationValues.size());
 				if (nod.getAdjacencyList().size() > 0) {
-					std::cout << "Action taken from " << nod.getCar().getCarNumber() << " is " << actionIndex << std::endl;
-					std::cout << "Desired speed = " << nod.getCar().getDesiredSpeed() << ", actual speed=" << nod.getCar().getVelocityX() << std::endl;
+					
 					int j = nod.getCar().getCarNumber();
 					if (strcmp(get_vehicle_name(myids[j]), "normal_flow.4") == 0) {
 						logFile << "Car=" << get_vehicle_name(myids[j]) << ", " << get_speed_x(myids[j]) << ", " << get_desired_speed(myids[j]) << ", " << "posx= "<<get_position_x(myids[j])<<", "<< actionIndex << std::endl;
@@ -190,43 +213,39 @@ void simulation_step() {
 							logFile << " action : value = " << f << std::endl;
 						}
 					}
-					/*if (strcmp(get_vehicle_name(myids[j]), "normal_flow.9") == 0) {
-						logFile9 << "Car=" << get_vehicle_name(myids[j]) << ", " << get_speed_x(myids[j]) << ", " << get_desired_speed(myids[j]) << ", " << "posx= " << get_position_x(myids[j]) << ", " << actionIndex << std::endl;
-					}
-					if(strcmp(get_vehicle_name(myids[j]), "normal_flow.12") == 0) {
-						logFile12 << "Car=" << get_vehicle_name(myids[j]) << ", " << get_speed_x(myids[j]) << ", " << get_desired_speed(myids[j]) << ", " << "posx= " << get_position_x(myids[j]) << ", " <<actionIndex<<std::endl;
-					}*/
+					
 					apply_acceleration(myids[nod.getCar().getCarNumber()], longitudinalAccelerationValues.at(action.rem), lateralAccelerationValues[action.quot]);
 				}
 				else {
+					/*
+					* 
+					* Apply acceleration of 0, in case where there are no neighbor vehicles in the ego vehicle
+					* 
+					*/
 					apply_acceleration(myids[nod.getCar().getCarNumber()], longitudinalAccelerationValues[3], lateralAccelerationValues[0]);
 				}
 			}
 			maxPlusGraph.clear();
 		}
-		std::cout << "////////////////" << std::endl;
 	}
 	
 
-	/* Attempt for creating a tree and pick an action based on MCTS algortihm.Each cars acts indpendenlty and treats the traffic as
+	/* 
+	* PART ONE: PLAIN MCTS CASE
+	* 
+	* Attempt for creating a tree and pick an action based on MCTS algortihm.Each cars acts indpendenlty and treats the traffic as
 	* part of the environment.
 	*
-	* PART ONE:
-	* Create
 	*
 	* */
 	if (RUNNING_AS_INDEPENDENT_AGENTS == 1) {
 
-		
-		
-
-		
-
 		laneFreeState root;
 
-		//2.Iterate through current vehicles in the road
+		//Iterate through current vehicles in the road
 		for (i = 0; i < n_myids; i++) {
 			logFile << get_vehicle_name(myids[i]) << "," << get_desired_speed(myids[i]) << std::endl;
+
 			/*
 			* Create root of the MCTS tree
 			*/
@@ -235,7 +254,6 @@ void simulation_step() {
 			//Take other cars in the road into consideration
 			for (j = 0; j < n_myids; j++) {
 
-				//std::string str2(get_vehicle_name(myids[j]));
 				if (j == i) {
 					Car agent = createCarFromSumo(j, myids);
 					root.setAgentState(agent);
@@ -245,7 +263,7 @@ void simulation_step() {
 				if (abs(get_position_x(myids[i]) - get_position_x(myids[j])) > visibilityTarget) {
 					continue;
 				}
-				if (get_global_position_x(myids[i]) - get_position_x(myids[j]) > 0) {// we are in front of car j
+				if (get_global_position_x(myids[i]) - get_position_x(myids[j]) > 0) {
 					continue;
 				}
 				
@@ -254,11 +272,9 @@ void simulation_step() {
 				Car car = createCarFromSumo(j, myids);
 				root.addCar(car);
 			}
-			//std::cout << "Root size = " << sizeof(root) << std::endl;
+			
 			/* After creating the initial state,run the MCTS algorithm and get the best action*/
 			carAction next = MCTSInstance::calculateAction(root);
-			//std::cout << "Root size after = " << sizeof(root) << std::endl;
-			
 
 
 			/* Apply the best action to the controlled car*/
@@ -267,45 +283,27 @@ void simulation_step() {
 			   3. Apply the corrected acceleration to the vehicle
 			 */
 
-
-			////////////////////////////////////////
-
 			double newLateralVelocity = root.getControlledCar().getVelocityY() + get_time_step_length() * next.getLateralAccelerationValue(); // v = u + at
 			double newLateralPosition = root.getControlledCar().getPositionY() + get_time_step_length() * newLateralVelocity;
 
 			double boundaryUp = (ROAD_WIDTH - ROAD_SAFETY_GAP - (root.getControlledCar().getWidth() / 2));
 			double boundaryDown = (root.getControlledCar().getWidth() / 2) + ROAD_SAFETY_GAP;
 			
-			///////////////////////////////////////////
-			
-			
-			/// ///////////////////
-			
 			if (newLateralPosition>boundaryUp) {
-				//std::cout << "Boundary up=" << boundaryUp << ", pos=" << newLateralPosition << ",old pos=" << root.getControlledCar().getPositionY() << ",speed="<<get_speed_y(myids[i])<<std::endl;
 				next.setLateralAccelerationValue(get_speed_y(myids[i])>0?-(get_speed_y(myids[i])/SIMULATION_CONSTANT_TIME):next.getLateralAccelerationValue()>0?0:next.getLateralAccelerationValue());
 			}
 
-
-			/// ///////////////////
-			
 			if (newLateralPosition < boundaryDown) {
-				
-				// Cancel out MCTS and apply acceleration that keeps the cars inbound
-				//std::cout << "Car "<<get_vehicle_name(myids[i])<<","<<"Boundary down = " << boundaryDown << ", pos = " << newLateralPosition << ", old pos = " << root.getControlledCar().getPositionY() << ", speed = " << get_speed_y(myids[i]) << std::endl;
 				next.setLateralAccelerationValue(get_speed_y(myids[i]) < 0 ? -(get_speed_y(myids[i]) / SIMULATION_CONSTANT_TIME) : next.getLateralAccelerationValue()<0?0:next.getLateralAccelerationValue());
-
-
 			}
 			
+
 			if (next.getLongitudinalAccelerationValue() > 0 && (get_speed_x(myids[i]) >= get_desired_speed(myids[i]))) {
 				apply_acceleration(myids[i], 0, next.getLateralAccelerationValue());
 			}
 			else {
 				apply_acceleration(myids[i], next.getLongitudinalAccelerationValue(), next.getLateralAccelerationValue());
 			}
-			
-			//apply_acceleration(myids[i], next.getLongitudinalAccelerationValue(), next.getLateralAccelerationValue());
 		}
 
 	}
@@ -316,7 +314,8 @@ void simulation_step() {
 
 	/*
 	* APPENDIX AUXILLIARY CODE:
-	* STATISTICS
+	* 
+	* STORE STATISTICS OF THE ENTIRE SIMULATION IN THE HEAP
 	*/
 
 	double totalDifferenceFromDesiredSpeed = 0;
@@ -348,13 +347,6 @@ void simulation_step() {
 		density_per_edge = get_density_per_segment_per_edge(myedges[i], segment_length);
 		if (density_per_edge != NULL) {
 			size = get_density_per_segment_per_edge_size(myedges[i], segment_length);
-			//printf("Edge id %lld\nDensity per segment:", myedges[i]);
-			//for (j = 0; j < size; j++) {
-			//	printf("%d,", density_per_edge[j]);
-			//}
-			//printf("\n");
-
-
 		}
 
 	}
@@ -391,10 +383,11 @@ void simulation_finalize() {
 	logFile.close();
 	logFile9.close();
 	logFile12.close();
+
 	/*
 	* WRITING STATISTICS TO FILE
 	*/
-	myFile.open("stats_ex4_mcts.csv");
+	myFile.open("stats_ex4_mcts.csv");//ADJUSTABLE TO LOCAL FILESYSTEM
 	myFile << "timestamp,Collisions,out_of_bounds,speedDiff,car1x,car1y,car1posx,car1posy,car2x,car2y,car2posx,car2posy,car3x,car3y,car3posx,car3posy,car4x,car4y,car4posx,car4posy" << std::endl;
 	int timestamp = 1;
 	for (timestampStatistics ts : stats) {
@@ -412,15 +405,8 @@ void simulation_finalize() {
 
 
 void event_vehicle_enter(NumericalID veh_id) {
-
-	//set_desired_speed(veh_id, rand()%(MAX_DESIRED_SPEED - MIN_DESIRED_SPEED + 1) + MIN_DESIRED_SPEED);
 	set_desired_speed(veh_id, (double)(rand() % (int)(MAX_DESIRED_SPEED - MIN_DESIRED_SPEED + 1) + MIN_DESIRED_SPEED));
-	//char* vname1 = get_vehicle_name(veh_id);
-	// printf("Vehicle %s entered with speed %f.\n",vname1,get_speed_x(veh_id));
-
-	//make the vehicles emulate a ring road scenario
 	set_circular_movement(veh_id, false);
-
 }
 
 void event_vehicle_exit(NumericalID veh_id) {
