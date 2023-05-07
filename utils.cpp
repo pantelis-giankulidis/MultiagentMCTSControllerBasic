@@ -109,7 +109,9 @@ int vectorSumInt(std::vector<std::vector<int>> v) {
 	return s;
 }
 
-
+/*Function that accumulates the values of a vector with integers
+*
+*/
 int vectorSum(std::vector<int> v) {
 	int s = 0;
 	for (int i : v) {

@@ -39,6 +39,7 @@
 
 
 /*Potential field parameters*/
+/*Parameters referring to the potential fields*/
 #define MAX_DECEL -2
 #define MAX_ACCEL 2
 #define MAX_LAT_ACCEL 1.5
