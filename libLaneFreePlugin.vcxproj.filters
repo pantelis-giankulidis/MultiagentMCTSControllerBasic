@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\pgian\Documents\final_HMMY\trafficFluid\MultiagentMCTSController\src\Controller.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\pgian\Documents\final_HMMY\trafficFluid\MultiagentMCTSController\src\LaneFree.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\pgian\Documents\final_HMMY\trafficFluid\MultiagentMCTSController\src\MCTS.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\pgian\Documents\final_HMMY\trafficFluid\MultiagentMCTSController\src\MaxPlus.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\pgian\Documents\final_HMMY\trafficFluid\MultiagentMCTSController\src\laneFreeGlobalState.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\pgian\Documents\final_HMMY\trafficFluid\MultiagentMCTSController\src\utils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\pgian\Documents\final_HMMY\trafficFluid\MultiagentMCTSController\src\MCTS.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\pgian\Documents\final_HMMY\trafficFluid\MultiagentMCTSController\src\utils.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\pgian\Documents\final_HMMY\trafficFluid\MultiagentMCTSController\src\laneFreeState.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\pgian\Documents\final_HMMY\trafficFluid\MultiagentMCTSController\src\carAction.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\pgian\Documents\final_HMMY\trafficFluid\MultiagentMCTSController\src\laneFreeSimulation.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\pgian\Documents\final_HMMY\trafficFluid\MultiagentMCTSController\src\FactoredValueMCTS.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{E425F90B-D3C3-3CF6-B579-45CD3880AD39}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{077C11B2-6C4F-370B-A417-912D497A071C}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
