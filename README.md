@@ -37,4 +37,4 @@ we evaluate the multiagent algorithm in three lane-free scenarios that involve a
 vehicles, and showcase its increased coordination capabilities compared to the plain
 MCTS algorithm at the expense of computational time.
 
-*** The official submitted and successfully defentend script can be found at <a href='https://drive.google.com/drive/folders/1K-viCYhWWIa8G9jzv9-jOVf5STpybHr3'>THIS LINK</a> ***
+*** The official submitted and successfully defended script can be found at <a href='https://drive.google.com/drive/folders/1K-viCYhWWIa8G9jzv9-jOVf5STpybHr3'>THIS LINK</a> ***
